@@ -1,15 +1,17 @@
 'use client';
 
+import { useSession } from 'next-auth/react';
+import Link from 'next/link';
 import { Bell, Menu, Search, Shield } from 'lucide-react';
 import { Avatar } from '@/components/ui';
-import { useAuthStore } from '@/store/auth-store';
 
 interface NavbarProps {
   onMenuToggle: () => void;
 }
 
 export function Navbar({ onMenuToggle }: NavbarProps) {
-  const { user } = useAuthStore();
+  const { data: session } = useSession();
+  const userName = session?.user?.name || 'User';
 
   return (
     <header className="sticky top-0 z-30 bg-navy-900/80 backdrop-blur-xl border-b border-white/5">
@@ -33,21 +35,19 @@ export function Navbar({ onMenuToggle }: NavbarProps) {
         </div>
 
         <div className="flex items-center gap-3">
-          <button className="relative p-2 rounded-xl hover:bg-white/5 text-white/50 transition-colors">
-            <Bell className="w-5 h-5" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-accent-red" />
-          </button>
+          <Link href="/notifications">
+            <button className="relative p-2 rounded-xl hover:bg-white/5 text-white/50 transition-colors">
+              <Bell className="w-5 h-5" />
+              <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-red-500" />
+            </button>
+          </Link>
 
           <div className="flex items-center gap-3 pl-3 border-l border-white/10">
             <div className="text-right hidden sm:block">
-              <p className="text-sm font-medium text-white">{user?.nama_lengkap || 'User'}</p>
-              <p className="text-xs text-white/40">{user?.tingkatan?.nama || 'Anggota'}</p>
+              <p className="text-sm font-medium text-white">{userName}</p>
+              <p className="text-xs text-white/40">Anggota</p>
             </div>
-            <Avatar
-              src={user?.foto_profil_url}
-              name={user?.nama_lengkap || 'User'}
-              size="sm"
-            />
+            <Avatar name={userName} size="sm" />
           </div>
         </div>
       </div>

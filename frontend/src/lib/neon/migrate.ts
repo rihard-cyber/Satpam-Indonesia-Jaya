@@ -228,6 +228,14 @@ INSERT INTO materi (kategori_id, judul, slug, konten, ringkasan, durasi_menit, u
     ((SELECT id FROM materi_kategori WHERE slug='bela-diri-dasar'), 'Penggunaan Alat Pengaman', 'penggunaan-alat-pengaman', 'Alat pengaman seperti tongkat, borgol, dan alat komunikasi...', 'Cara menggunakan alat pengaman dengan benar', 15, 2, true)
 ON CONFLICT (slug) DO NOTHING;
 
+-- Migrations for existing tables
+ALTER TABLE materi ADD COLUMN IF NOT EXISTS ringkasan TEXT;
+ALTER TABLE materi ADD COLUMN IF NOT EXISTS video_url TEXT;
+ALTER TABLE materi ADD COLUMN IF NOT EXISTS durasi_menit INT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS nama_panggilan TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS phone TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS foto_profil_url TEXT;
+
 -- AI Chat
 CREATE TABLE IF NOT EXISTS ai_chat_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
