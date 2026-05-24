@@ -1,0 +1,16 @@
+node_modules/
+.next/
+.expo/
+dist/
+out/
+*.tsbuildinfo
+.env.local
+.env*.local
+.env.development
+.env.production
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
