@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button, Input } from '@/components/ui';
 import { Mail, Lock, Eye, EyeOff, MessageCircle, User, Shield, ChevronDown } from 'lucide-react';
@@ -13,36 +14,101 @@ const tingkatanOptions = [
 ];
 
 export default function RegisterPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const [terms, setTerms] = useState(false);
+
+  const [namaLengkap, setNamaLengkap] = useState('');
+  const [namaPanggilan, setNamaPanggilan] = useState('');
+  const [tingkatan, setTingkatan] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+
+    if (!namaLengkap || !email || !password || !confirmPassword) {
+      setError('Harap isi semua field wajib');
+      return;
+    }
+    if (password.length < 8) {
+      setError('Password minimal 8 karakter');
+      return;
+    }
+    if (password !== confirmPassword) {
+      setError('Password tidak cocok');
+      return;
+    }
+    if (!terms) {
+      setError('Harap setujui syarat & ketentuan');
+      return;
+    }
+
     setIsLoading(true);
-    // TODO: Implement register
-    setTimeout(() => setIsLoading(false), 2000);
+    try {
+      const res = await fetch('/api/auth/register', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          email,
+          password,
+          nama_lengkap: namaLengkap,
+          nama_panggilan: namaPanggilan || undefined,
+          phone: phone || undefined,
+          tingkatan: tingkatan || undefined,
+        }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setError(data.error || data.message || 'Gagal mendaftar');
+        setIsLoading(false);
+        return;
+      }
+
+      router.push('/login?registered=true');
+    } catch {
+      setError('Terjadi kesalahan. Coba lagi.');
+      setIsLoading(false);
+    }
   };
 
   return (
     <AuthLayout title="Daftar Akun" subtitle="Bergabung dengan komunitas Satpam Indonesia JAYA">
       <form onSubmit={handleSubmit} className="space-y-4">
+        {error && (
+          <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
+            {error}
+          </div>
+        )}
+
         <div className="grid grid-cols-2 gap-4">
           <Input
             label="Nama Lengkap"
             placeholder="Nama lengkap"
             leftIcon={<User className="w-4 h-4" />}
+            value={namaLengkap}
+            onChange={(e) => setNamaLengkap(e.target.value)}
           />
           <Input
             label="Nama Panggilan"
             placeholder="Nama panggilan"
+            value={namaPanggilan}
+            onChange={(e) => setNamaPanggilan(e.target.value)}
           />
         </div>
 
         <div className="relative">
           <select
             className="w-full rounded-xl border border-white/10 bg-navy-900/50 px-4 py-2.5 text-sm text-white/70 appearance-none focus:outline-none focus:ring-2 focus:ring-gold/50"
-            defaultValue=""
+            value={tingkatan}
+            onChange={(e) => setTingkatan(e.target.value)}
           >
             <option value="" disabled>Pilih tingkatan</option>
             {tingkatanOptions.map((opt) => (
@@ -60,6 +126,8 @@ export default function RegisterPage() {
           type="email"
           placeholder="contoh@email.com"
           leftIcon={<Mail className="w-4 h-4" />}
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
         />
 
         <Input
@@ -67,6 +135,8 @@ export default function RegisterPage() {
           type="tel"
           placeholder="08xxxxxxxxxx"
           leftIcon={<MessageCircle className="w-4 h-4" />}
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
         />
 
         <div className="relative">
@@ -75,6 +145,8 @@ export default function RegisterPage() {
             type={showPassword ? 'text' : 'password'}
             placeholder="Minimal 8 karakter"
             leftIcon={<Lock className="w-4 h-4" />}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             rightIcon={
               <button type="button" onClick={() => setShowPassword(!showPassword)}>
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -89,6 +161,8 @@ export default function RegisterPage() {
             type={showConfirmPassword ? 'text' : 'password'}
             placeholder="Ulangi password"
             leftIcon={<Lock className="w-4 h-4" />}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
             rightIcon={
               <button type="button" onClick={() => setShowConfirmPassword(!showConfirmPassword)}>
                 {showConfirmPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -100,6 +174,8 @@ export default function RegisterPage() {
         <label className="flex items-start gap-3 cursor-pointer">
           <input
             type="checkbox"
+            checked={terms}
+            onChange={(e) => setTerms(e.target.checked)}
             className="mt-0.5 w-4 h-4 rounded border-white/20 bg-navy-800 text-gold focus:ring-gold/50"
           />
           <span className="text-sm text-white/50">

@@ -124,7 +124,9 @@ CREATE TABLE IF NOT EXISTS materi (
     judul TEXT NOT NULL,
     slug TEXT UNIQUE NOT NULL,
     konten TEXT DEFAULT '',
+    ringkasan TEXT,
     durasi_menit INT,
+    video_url TEXT,
     urutan INT DEFAULT 0,
     is_published BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
@@ -214,6 +216,18 @@ CREATE TABLE IF NOT EXISTS notifications (
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Materi Seed Data
+INSERT INTO materi (kategori_id, judul, slug, konten, ringkasan, durasi_menit, urutan, is_published) VALUES
+    ((SELECT id FROM materi_kategori WHERE slug='sejarah-satpam'), 'Sejarah dan Perkembangan Satpam di Indonesia', 'sejarah-satpam-indonesia', 'Satuan Pengamanan (Satpam) telah ada sejak zaman kolonial Belanda...', 'Mempelajari sejarah panjang satpam Indonesia dari masa ke masa', 15, 1, true),
+    ((SELECT id FROM materi_kategori WHERE slug='sejarah-satpam'), 'Regulasi dan Dasar Hukum Satpam', 'regulasi-satpam', 'Dasar hukum utama profesi Satpam adalah Perkap No. 24 Tahun 2007...', 'Memahami regulasi yang mengatur profesi satpam', 20, 2, true),
+    ((SELECT id FROM materi_kategori WHERE slug='tupoksi-satpam'), 'Tugas Pokok Satpam', 'tugas-pokok-satpam', 'Tugas pokok Satpam meliputi pengamanan fisik, personel, dan informasi...', 'Mengenal tugas-tugas utama seorang satpam', 15, 1, true),
+    ((SELECT id FROM materi_kategori WHERE slug='tupoksi-satpam'), 'Wewenang dan Batasan Satpam', 'wewenang-satpam', 'Satpam memiliki wewenang terbatas yang diatur oleh undang-undang...', 'Batasan hukum dan wewenang yang dimiliki satpam', 10, 2, true),
+    ((SELECT id FROM materi_kategori WHERE slug='turjawali'), 'Pengaturan Penjagaan', 'pengaturan-penjagaan', 'Teknik pengaturan penjagaan yang efektif meliputi...', 'Cara mengatur dan melaksanakan tugas penjagaan', 20, 1, true),
+    ((SELECT id FROM materi_kategori WHERE slug='turjawali'), 'Tata Cara Pengawalan', 'tata-cara-pengawalan', 'Pengawalan dilakukan dengan prosedur standar operasi yang ketat...', 'Prosedur pengawalan yang benar dan profesional', 25, 2, true),
+    ((SELECT id FROM materi_kategori WHERE slug='bela-diri-dasar'), 'Teknik Bela Diri Dasar', 'teknik-bela-diri-dasar', 'Teknik dasar bela diri untuk satpam mencakup kuncian, bantingan, dan hindaran...', 'Dasar-dasar teknik bela diri yang wajib dikuasai', 30, 1, true),
+    ((SELECT id FROM materi_kategori WHERE slug='bela-diri-dasar'), 'Penggunaan Alat Pengaman', 'penggunaan-alat-pengaman', 'Alat pengaman seperti tongkat, borgol, dan alat komunikasi...', 'Cara menggunakan alat pengaman dengan benar', 15, 2, true)
+ON CONFLICT (slug) DO NOTHING;
+
 -- AI Chat
 CREATE TABLE IF NOT EXISTS ai_chat_messages (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -232,7 +246,7 @@ export async function runMigration() {
 
   for (const stmt of statements) {
     try {
-      await sql.unsafe(stmt + ';');
+      await sql.query(stmt + ';');
     } catch (err) {
       console.error('Migration error (skipping):', (err as Error).message);
     }

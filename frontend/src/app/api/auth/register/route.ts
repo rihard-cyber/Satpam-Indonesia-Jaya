@@ -5,23 +5,29 @@ import crypto from 'crypto';
 
 export async function POST(request: Request) {
   try {
-    const { email, password, nama_lengkap, nama_panggilan, phone } = await request.json();
+    const { email, password, nama_lengkap, nama_panggilan, phone, tingkatan } = await request.json();
 
     if (!email || !password || !nama_lengkap) {
-      return NextResponse.json({ message: 'Email, password, dan nama wajib diisi' }, { status: 400 });
+      return NextResponse.json({ error: 'Email, password, dan nama wajib diisi' }, { status: 400 });
     }
 
     const [existing] = await sql`SELECT id FROM users WHERE email = ${email}`;
     if (existing) {
-      return NextResponse.json({ message: 'Email sudah terdaftar' }, { status: 409 });
+      return NextResponse.json({ error: 'Email sudah terdaftar' }, { status: 409 });
     }
 
     const id = crypto.randomUUID();
     const password_hash = await bcrypt.hash(password, 12);
 
+    let tingkatan_id = null;
+    if (tingkatan) {
+      const [t] = await sql`SELECT id FROM tingkatan WHERE kode = ${tingkatan}`;
+      if (t) tingkatan_id = t.id;
+    }
+
     await sql`
-      INSERT INTO users (id, email, nama_lengkap, nama_panggilan, phone, password_hash)
-      VALUES (${id}, ${email}, ${nama_lengkap}, ${nama_panggilan || null}, ${phone || null}, ${password_hash})
+      INSERT INTO users (id, email, nama_lengkap, nama_panggilan, phone, password_hash, tingkatan_id)
+      VALUES (${id}, ${email}, ${nama_lengkap}, ${nama_panggilan || null}, ${phone || null}, ${password_hash}, ${tingkatan_id})
     `;
 
     await sql`
@@ -34,6 +40,6 @@ export async function POST(request: Request) {
     }, { status: 201 });
   } catch (err) {
     const message = err instanceof Error ? err.message : 'Internal server error';
-    return NextResponse.json({ message }, { status: 500 });
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
