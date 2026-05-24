@@ -3,24 +3,23 @@ import { auth } from '@/lib/auth';
 import { sql } from '@/lib/neon/db';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 
-const genAI = new GoogleGenerativeAI(process.env.GEMINI_API_KEY || '');
-const systemPrompt = `Kamu adalah AI Assistant resmi Satpam Indonesia JAYA, platform digital untuk satpam Indonesia.
+const hasGemini = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 10;
+const genAI = hasGemini ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY!) : null;
 
-TUGAS:
-- Jawab pertanyaan tentang profesi Satpam, keamanan, Turjawali, SOP, sertifikasi, dan tugas security
-- Gunakan bahasa Indonesia yang jelas dan profesional
-- Berikan jawaban yang akurat berdasarkan regulasi yang berlaku (Perkap No. 24/2007, UU No. 2/2002, dll)
-- Jika ditanya tentang materi, jelaskan dengan detail dan terstruktur
-- Jika tidak tahu, akui dan jangan mengarang
+const systemPrompt = `Kamu adalah AI Assistant "Satpam Indonesia JAYA". Jawab pertanyaan tentang profesi Satpam di Indonesia.
 
-PENTING:
-- Satpam jenjang: Gada Pratama (dasar), Gada Madya (Danru), Gada Utama (manajer)
-- Turjawali = Pengaturan, Penjagaan, Pengawalan, Patroli
+Gunakan bahasa Indonesia yang jelas dan profesional. Jelaskan dengan detail. Jika tidak tahu, akui saja.
+
+Istilah penting:
+- Turjawali = Pengaturan + Penjagaan + Pengawalan + Patroli (tugas pokok Satpam)
 - Tupoksi = Tugas Pokok dan Fungsi
 - KTA = Kartu Tanda Anggota
 - PPS = Pendidikan Profesi Satpam
+- Gada Pratama = jenjang dasar
+- Gada Madya = jenjang menengah (Danru)
+- Gada Utama = jenjang tertinggi (manajer)
 
-BALASLAH DENGAN SINGKAT, PADAT, DAN INFORMATIF. Maksimal 3 paragraf.`;
+Jawab maksimal 3 paragraf.`;
 
 export async function POST(request: Request) {
   const session = await auth();
@@ -36,26 +35,27 @@ export async function POST(request: Request) {
 
     let reply = '';
 
-    if (genAI.apiKey && genAI.apiKey !== '') {
+    if (hasGemini && genAI) {
       try {
         const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        const context = contextTitle ? `Konteks: user sedang membaca materi "${contextTitle}". Jawab relevan dengan materi tersebut.\n\n` : '';
-        const result = await model.generateContent(systemPrompt + '\n\n' + context + 'Pertanyaan: ' + message);
+        const context = contextTitle
+          ? `Konteks: user sedang membaca materi "${contextTitle}". Jawab relevan dengan materi tersebut.\n\n`
+          : '';
+        const result = await Promise.race([
+          model.generateContent(systemPrompt + '\n\n' + context + 'Pertanyaan: ' + message),
+          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+        ]);
         reply = result.response.text();
       } catch {
-        reply = getFallbackResponse(message, contextTitle);
+        reply = await getFallbackResponse(message, contextTitle);
       }
     } else {
-      reply = getFallbackResponse(message, contextTitle);
+      reply = await getFallbackResponse(message, contextTitle);
     }
 
     await sql`
       INSERT INTO ai_chat_messages (user_id, role, message)
-      VALUES (${session.user.id}, 'user', ${message})
-    `;
-    await sql`
-      INSERT INTO ai_chat_messages (user_id, role, message)
-      VALUES (${session.user.id}, 'assistant', ${reply})
+      VALUES (${session.user.id}, 'assistant', ${'User: ' + message + '\n\nAI: ' + reply})
     `;
 
     return NextResponse.json({ reply });
@@ -64,27 +64,51 @@ export async function POST(request: Request) {
   }
 }
 
-function getFallbackResponse(question: string, contextTitle?: string): string {
+async function getFallbackResponse(question: string, contextTitle?: string): Promise<string> {
   const q = question.toLowerCase().trim();
 
-  const fallback: Record<string, string> = {
-    turjawali: 'Turjawali adalah singkatan dari Tugas Pokok Satpam: Pengaturan (mengatur lalu lintas/tamu), Penjagaan (menjaga pos), Pengawalan (mengawal barang/orang), Patroli (patroli rutin). Ini adalah tugas inti setiap Satpam.',
-    danru: 'Danru (Komandan Regu) adalah pemimpin regu Satpam minimal Gada Madya. Tugas: koordinasi anggota, briefing shift, pengawasan pos, laporan ke atasan, penanganan situasi darurat.',
-    'gada pratama': 'Gada Pratama adalah jenjang dasar sertifikasi Satpam. Materi: dasar Turjawali, bela diri, etika profesi, penanganan tamu, pengamanan gedung. Masa berlaku 3 tahun.',
-    'gada madya': 'Gada Madya setara Danru. Materi: leadership, manajemen risiko, investigasi, crowd control, emergency response, intelijen dasar. Syarat: minimal 2 tahun sebagai Gada Pratama.',
-    'gada utama': 'Gada Utama adalah jenjang tertinggi. Fokus strategis: security management, crisis management, corporate security, executive protection, cyber security. Syarat: minimal 3 tahun sebagai Gada Madya.',
-  };
-
-  for (const [key, val] of Object.entries(fallback)) {
-    if (q.includes(key)) return val;
-  }
-
+  // If viewing a specific materi, return its content from DB
   if (contextTitle) {
-    const ct = contextTitle.toLowerCase();
-    for (const [key, val] of Object.entries(fallback)) {
-      if (ct.includes(key)) return val + '\n\nAda pertanyaan lain tentang materi ini?';
+    try {
+      const rows = await sql`
+        SELECT judul, ringkasan, konten FROM materi
+        WHERE LOWER(judul) LIKE ${'%' + contextTitle.toLowerCase() + '%'}
+           OR LOWER(ringkasan) LIKE ${'%' + contextTitle.toLowerCase() + '%'}
+        LIMIT 1
+      `;
+      if (rows.length > 0) {
+        const m = rows[0] as { judul: string; ringkasan: string | null; konten: string | null };
+        let ans = `**${m.judul}**\n\n`;
+        if (m.ringkasan) ans += `*${m.ringkasan}*\n\n`;
+        const clean = (m.konten || '')
+          .replace(/<[^>]+>/g, '')
+          .split('\n')
+          .filter(Boolean)
+          .slice(0, 6)
+          .join('\n');
+        if (clean) ans += clean;
+        return ans;
+      }
+    } catch {
+      // fall through to keyword lookup
     }
   }
 
-  return `Terima kasih atas pertanyaan Anda. Saya sarankan:\n\n1. 📖 Cek materi terkait di halaman Materi Satpam\n2. 💬 Diskusikan di Forum Komunitas\n3. 📞 Hubungi atasan/Danru jika darurat\n\nAda topik lain yang ingin ditanyakan?`;
+  // Keyword-based fallback
+  const fb: Record<string, string> = {
+    turjawali: 'Turjawali: Pengaturan, Penjagaan, Pengawalan, Patroli — 4 tugas pokok Satpam.',
+    danru: 'Danru (Komandan Regu) pemimpin regu Satpam, minimal Gada Madya. Tugas: koordinasi, briefing, pengawasan, laporan.',
+    'gada pratama': 'Jenjang dasar Satpam. Materi: Turjawali, bela diri, etika, penanganan tamu. Masa berlaku 3 tahun.',
+    'gada madya': 'Jenjang menengah (Danru). Materi: leadership, manajemen risiko, investigasi, crowd control. Syarat: 2 tahun Gada Pratama.',
+    'gada utama': 'Jenjang tertinggi. Materi: security management, crisis management, cyber security. Syarat: 3 tahun Gada Madya.',
+    'executive protection': 'Executive Protection — perlindungan VVIP dan eksekutif perusahaan. Prinsip: preventive, low profile, flexible, professional. Advance: site survey, route planning. Formasi: diamond, V, box. Perimeter: inner (langsung VVIP), middle (venue), outer (area luar). Vehicle: pemeriksaan kendaraan, convoy, anti-ambush. Komunikasi: kode rahasia, check-in periodik.',
+    perlindungan: 'Perlindungan VVIP/eksekutif menggunakan prinsip preventive dan low profile. Advance meliputi site survey, route planning, threat assessment. Formasi pengamanan: diamond, V, box. Perimeter berlapis: inner, middle, outer. Tim: advance team, close protection, driver, backup.',
+    vvip: 'Perlindungan VVIP adalah prioritas utama Satpam Gada Utama. Prinsip: cegah sebelum terjadi, low profile agar tidak menarik perhatian. Perimeter pengamanan berlapis dengan formasi diamond atau V. Selalu ada rute alternatif dan kendaraan cadangan.',
+    eksekutif: 'Perlindungan eksekutif membutuhkan advance planning, threat assessment, dan koordinasi tim. Tim: Team Leader, Close Protection Officer (CPO), Driver, Advance Team. Komunikasi via HT dengan kode khusus.',
+    sejarah: 'Prof. Dr. Awaloedin Djamin, MBA mendirikan Satpam pada 14 September 1980 lewat SK Kapolri No. Pol. Skep/126/IX/1980. Beliau adalah Kepala Polri ke-12. 14 September = Hari Satpam Nasional.',
+    pendiri: 'Pendiri Satpam Indonesia: Prof. Dr. Awaloedin Djamin, MBA. Kapolri ke-12 (1978-1982). Wafat 3 Maret 2021 di Jakarta.',
+  };
+  for (const [k, v] of Object.entries(fb)) { if (q.includes(k)) return v; }
+
+  return 'Saya siap membantu pertanyaan seputar profesi Satpam, Turjawali, SOP keamanan, sertifikasi, dan tugas security. Silakan tanya!';
 }
