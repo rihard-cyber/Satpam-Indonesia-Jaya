@@ -1,53 +1,54 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase/server';
+import { auth } from '@/lib/auth';
+import { sql } from '@/lib/neon/db';
 
 export async function GET(request: Request) {
-  const supabase = await createServerSupabase();
-  const { searchParams } = new URL(request.url);
-  const tingkatan = searchParams.get('tingkatan');
+  try {
+    const { searchParams } = new URL(request.url);
+    const tingkatan = searchParams.get('tingkatan');
 
-  let query = supabase
-    .from('materi')
-    .select('*, kategori:materi_kategori_id(*), tingkatan:materi_kategori!inner(tingkatan_id, tingkatan:tingkatan_id(*))')
-    .eq('is_published', true)
-    .order('urutan');
+    let data;
+    if (tingkatan) {
+      data = await sql`
+        SELECT m.*, mk.nama as kategori_nama, mk.slug as kategori_slug
+        FROM materi m
+        JOIN materi_kategori mk ON mk.id = m.kategori_id
+        WHERE m.is_published = true
+          AND mk.tingkatan_id = (SELECT id FROM tingkatan WHERE kode = ${tingkatan})
+        ORDER BY m.urutan
+      `;
+    } else {
+      data = await sql`
+        SELECT m.*, mk.nama as kategori_nama, mk.slug as kategori_slug
+        FROM materi m
+        JOIN materi_kategori mk ON mk.id = m.kategori_id
+        WHERE m.is_published = true
+        ORDER BY m.urutan
+      `;
+    }
 
-  if (tingkatan) {
-    query = query.eq('kategori.tingkatan_id', tingkatan);
+    return NextResponse.json({ data });
+  } catch (err) {
+    return NextResponse.json({ message: 'Gagal memuat materi' }, { status: 500 });
   }
-
-  const { data, error } = await query;
-
-  if (error) {
-    return NextResponse.json({ message: error.message }, { status: 500 });
-  }
-
-  return NextResponse.json({ data });
 }
 
 export async function POST(request: Request) {
-  const supabase = await createServerSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
+  const session = await auth();
+  if (!session?.user?.id) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await request.json();
-  const { data, error } = await supabase
-    .from('materi_progress')
-    .upsert({
-      user_id: user.id,
-      materi_id: body.materi_id,
-      is_completed: body.is_completed,
-      last_position_seconds: body.last_position_seconds,
-    })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ message: error.message }, { status: 500 });
+  try {
+    const body = await request.json();
+    await sql`
+      INSERT INTO materi_progress (user_id, materi_id, is_completed)
+      VALUES (${session.user.id}, ${body.materi_id}, ${body.is_completed || false})
+      ON CONFLICT (user_id, materi_id)
+      DO UPDATE SET is_completed = EXCLUDED.is_completed
+    `;
+    return NextResponse.json({ message: 'Progress tersimpan' });
+  } catch (err) {
+    return NextResponse.json({ message: 'Gagal menyimpan progress' }, { status: 500 });
   }
-
-  return NextResponse.json({ data });
 }

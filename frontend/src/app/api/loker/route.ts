@@ -1,40 +1,32 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase/server';
+import { auth } from '@/lib/auth';
+import { sql } from '@/lib/neon/db';
 
 export async function GET() {
-  const supabase = await createServerSupabase();
-
-  const { data, error } = await supabase
-    .from('job_vacancies')
-    .select('*')
-    .eq('status', 'active')
-    .order('created_at', { ascending: false });
-
-  if (error) {
-    return NextResponse.json({ message: error.message }, { status: 500 });
+  try {
+    const data = await sql`
+      SELECT * FROM job_vacancies WHERE status = 'active' ORDER BY created_at DESC
+    `;
+    return NextResponse.json({ data });
+  } catch (err) {
+    return NextResponse.json({ message: 'Gagal memuat data' }, { status: 500 });
   }
-
-  return NextResponse.json({ data });
 }
 
 export async function POST(request: Request) {
-  const supabase = await createServerSupabase();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) {
+  const session = await auth();
+  if (!session?.user?.id) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const body = await request.json();
-  const { data, error } = await supabase
-    .from('job_vacancies')
-    .insert({ ...body, posted_by: user.id })
-    .select()
-    .single();
-
-  if (error) {
-    return NextResponse.json({ message: error.message }, { status: 500 });
+  try {
+    const body = await request.json();
+    await sql`
+      INSERT INTO job_vacancies (perusahaan_nama, posisi, penempatan, deskripsi_tugas, posted_by)
+      VALUES (${body.perusahaan_nama}, ${body.posisi}, ${body.penempatan}, ${body.deskripsi_tugas}, ${session.user.id})
+    `;
+    return NextResponse.json({ message: 'Lowongan berhasil ditambahkan' }, { status: 201 });
+  } catch (err) {
+    return NextResponse.json({ message: 'Gagal menambahkan lowongan' }, { status: 500 });
   }
-
-  return NextResponse.json({ data }, { status: 201 });
 }

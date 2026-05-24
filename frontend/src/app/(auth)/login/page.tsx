@@ -1,21 +1,53 @@
 'use client';
 
 import { useState } from 'react';
+import { useRouter } from 'next/navigation';
+import { signIn } from 'next-auth/react';
 import { AuthLayout } from '@/components/layout/AuthLayout';
 import { Button, Input } from '@/components/ui';
 import { Mail, Lock, Eye, EyeOff, MessageCircle } from 'lucide-react';
 import Link from 'next/link';
 
 export default function LoginPage() {
+  const router = useRouter();
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
   const [method, setMethod] = useState<'email' | 'whatsapp'>('email');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [password, setPassword] = useState('');
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
+
+    if (!password || (method === 'email' ? !email : !phone)) {
+      setError('Harap isi semua field');
+      setIsLoading(false);
+      return;
+    }
+
     setIsLoading(true);
-    // TODO: Implement login
-    setTimeout(() => setIsLoading(false), 2000);
+    try {
+      const identifier = method === 'email' ? email : phone;
+      const result = await signIn('credentials', {
+        email: identifier,
+        password,
+        redirect: false,
+      });
+
+      if (result?.error) {
+        setError('Email/WhatsApp atau password salah');
+        setIsLoading(false);
+        return;
+      }
+
+      router.push('/dashboard');
+    } catch {
+      setError('Terjadi kesalahan. Coba lagi.');
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -47,12 +79,20 @@ export default function LoginPage() {
           </button>
         </div>
 
+        {error && (
+          <div className="rounded-xl bg-red-500/10 border border-red-500/30 px-4 py-3 text-sm text-red-400">
+            {error}
+          </div>
+        )}
+
         {method === 'email' ? (
           <Input
             label="Email"
             type="email"
             placeholder="Masukkan email"
             leftIcon={<Mail className="w-4 h-4" />}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
           />
         ) : (
           <Input
@@ -60,6 +100,8 @@ export default function LoginPage() {
             type="tel"
             placeholder="08xxxxxxxxxx"
             leftIcon={<MessageCircle className="w-4 h-4" />}
+            value={phone}
+            onChange={(e) => setPhone(e.target.value)}
           />
         )}
 
@@ -69,6 +111,8 @@ export default function LoginPage() {
             type={showPassword ? 'text' : 'password'}
             placeholder="Masukkan password"
             leftIcon={<Lock className="w-4 h-4" />}
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
             rightIcon={
               <button type="button" onClick={() => setShowPassword(!showPassword)}>
                 {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
