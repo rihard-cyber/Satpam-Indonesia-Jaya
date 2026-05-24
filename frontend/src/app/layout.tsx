@@ -16,8 +16,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="id" className="dark">
-      <body className="antialiased bg-navy-900 text-white">
+      <body className="antialiased bg-navy-900 text-white relative min-h-screen">
         <SessionProvider>{children}</SessionProvider>
+        <div className="fixed bottom-0 left-0 right-0 py-2 text-center text-xs text-gold/40 bg-navy-900/70 backdrop-blur-sm border-t border-gold/10 z-50">
+          &copy; By- CyberRichardMeha2026
+        </div>
       </body>
     </html>
   );
