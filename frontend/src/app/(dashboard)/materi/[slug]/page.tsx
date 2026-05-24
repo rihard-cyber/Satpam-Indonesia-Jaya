@@ -1,166 +1,135 @@
 'use client';
 
-import { useState } from 'react';
-import { useParams } from 'next/navigation';
+import { useEffect, useState } from 'react';
+import { useParams, useRouter } from 'next/navigation';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
-import { Card, CardContent, CardHeader, CardTitle, Badge, Button } from '@/components/ui';
-import {
-  BookOpen,
-  Clock,
-  CheckCircle,
-  ChevronLeft,
-  ChevronRight,
-  PlayCircle,
-  FileText,
-  MessageCircle,
-  Download,
-} from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/components/ui';
+import { BookOpen, Clock, ChevronLeft, Bot, Send, Sparkles } from 'lucide-react';
 
 export default function MateriDetailPage() {
   const params = useParams();
-  const [isCompleted, setIsCompleted] = useState(false);
+  const router = useRouter();
+  const [materi, setMateri] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const [showAI, setShowAI] = useState(false);
+  const [aiInput, setAiInput] = useState('');
+  const [aiMessages, setAiMessages] = useState<{ role: string; message: string }[]>([]);
+  const [aiLoading, setAiLoading] = useState(false);
+
+  useEffect(() => {
+    async function load() {
+      try {
+        const res = await fetch(`/api/materi/${params.slug}`);
+        const json = await res.json();
+        if (json.data) setMateri(json.data);
+      } catch {} finally {
+        setLoading(false);
+      }
+    }
+    load();
+  }, [params.slug]);
+
+  const handleAIAsk = async () => {
+    if (!aiInput.trim()) return;
+    const q = aiInput.trim();
+    setAiInput('');
+    setAiMessages(prev => [...prev, { role: 'user', message: q }]);
+    setAiLoading(true);
+    try {
+      const res = await fetch('/api/ai/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ message: q, contextTitle: materi?.judul }),
+      });
+      const json = await res.json();
+      setAiMessages(prev => [...prev, { role: 'assistant', message: json.reply }]);
+    } catch {} finally {
+      setAiLoading(false);
+    }
+  };
+
+  if (loading) return <DashboardLayout><div className="flex items-center justify-center h-64"><div className="animate-spin w-8 h-8 border-2 border-gold border-t-transparent rounded-full" /></div></DashboardLayout>;
+
+  if (!materi) return <DashboardLayout><div className="text-center py-20"><p className="text-white/40">Materi tidak ditemukan</p><Button onClick={() => router.push('/materi')} className="mt-4">Kembali</Button></div></DashboardLayout>;
 
   return (
     <DashboardLayout>
-      <div className="space-y-6">
-        <div className="flex items-center gap-4">
-          <Button variant="ghost" size="sm" leftIcon={<ChevronLeft className="w-4 h-4" />}>
-            Kembali
-          </Button>
-          <Badge variant="gold" size="md">Gada Pratama</Badge>
-        </div>
+      <div className="max-w-4xl mx-auto space-y-6">
+        <button onClick={() => router.push('/materi')} className="flex items-center gap-2 text-sm text-white/40 hover:text-gold transition-colors">
+          <ChevronLeft className="w-4 h-4" /> Kembali ke Materi
+        </button>
 
-        <div className="grid lg:grid-cols-3 gap-6">
-          {/* Main Content */}
-          <div className="lg:col-span-2 space-y-6">
-            <Card variant="gradient">
+        <Card variant="gradient">
+          <CardContent>
+            <div className="flex items-center gap-3 mb-4">
+              <Badge variant="info" size="sm">{materi.kategori_nama}</Badge>
+              <Badge variant="gold" size="sm">{materi.tingkatan_nama}</Badge>
+              <div className="flex items-center gap-1 text-xs text-white/40 ml-auto">
+                <Clock className="w-3 h-3" /> {materi.durasi_menit} menit
+              </div>
+            </div>
+            <h1 className="text-2xl font-bold text-white mb-4">{materi.judul}</h1>
+            {materi.ringkasan && (
+              <p className="text-sm text-white/50 mb-6 italic">{materi.ringkasan}</p>
+            )}
+            <div className="prose prose-invert max-w-none text-white/70 text-sm leading-relaxed whitespace-pre-wrap">
+              {materi.konten || 'Konten materi sedang dalam pengembangan.'}
+            </div>
+          </CardContent>
+        </Card>
+
+        {materi.video_url && (
+          <Card variant="glass">
+            <CardHeader>
+              <CardTitle>Video Pembelajaran</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="aspect-video rounded-xl bg-navy-800 flex items-center justify-center">
+                <BookOpen className="w-12 h-12 text-gold/30" />
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        <button
+          onClick={() => setShowAI(!showAI)}
+          className="fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gold text-black flex items-center justify-center shadow-lg shadow-gold/30 hover:bg-gold-light transition-all z-50"
+        >
+          <Bot className="w-6 h-6" />
+        </button>
+
+        {showAI && (
+          <div className="fixed bottom-24 right-6 w-96 max-w-[calc(100vw-2rem)] z-50">
+            <Card variant="gradient" className="border-gold/20">
               <CardContent>
-                <h1 className="text-2xl font-bold text-white mb-2">
-                  Sejarah Satpam Indonesia
-                </h1>
-                <div className="flex items-center gap-4 text-sm text-white/40 mb-6">
-                  <div className="flex items-center gap-1">
-                    <Clock className="w-4 h-4" />
-                    15 menit
-                  </div>
-                  <div className="flex items-center gap-1">
-                    <FileText className="w-4 h-4" />
-                    Modul Teori
-                  </div>
+                <div className="flex items-center gap-2 mb-3">
+                  <Sparkles className="w-4 h-4 text-gold" />
+                  <span className="text-sm font-medium text-white">Tanya AI tentang {materi.judul}</span>
                 </div>
-
-                <div className="aspect-video rounded-2xl bg-gradient-to-br from-navy-700 to-navy-900 border border-white/5 flex items-center justify-center mb-6">
-                  <button className="w-16 h-16 rounded-full bg-gold/20 border border-gold/30 flex items-center justify-center hover:bg-gold/30 transition-colors">
-                    <PlayCircle className="w-8 h-8 text-gold" />
-                  </button>
-                </div>
-
-                <div className="prose prose-invert max-w-none">
-                  <h3 className="text-lg font-semibold text-white mb-4">Sejarah Berdirinya Satpam Indonesia</h3>
-                  <div className="text-white/60 text-sm leading-relaxed space-y-4">
-                    <p>
-                      Satuan Pengamanan (Satpam) Indonesia didirikan pada tahun 1980 oleh Prof. Dr. H. Awaloedin Djamin, M.Si., 
-                      seorang akademisi dan praktisi keamanan terkemuka di Indonesia.
-                    </p>
-                    <p>
-                      Awal mula terbentuknya Satpam dilatarbelakangi oleh kebutuhan akan tenaga keamanan yang profesional 
-                      dan terstandarisasi di lingkungan perumahan, perkantoran, dan industri di Indonesia.
-                    </p>
-                    <p>
-                      Pada tahun 1981, didirikanlah Lembaga Pendidikan dan Pelatihan (Lemdiklat) Satpam untuk mencetak 
-                      anggota Satpam yang berkualitas dan memiliki kompetensi standar nasional.
-                    </p>
-                    <div className="p-4 rounded-xl bg-gold/5 border border-gold/10">
-                      <p className="font-medium text-gold">
-                        Poin Penting:
-                      </p>
-                      <ul className="list-disc list-inside mt-2 space-y-1">
-                        <li>Tahun Berdiri: 1980</li>
-                        <li>Pendiri: Prof. Dr. H. Awaloedin Djamin</li>
-                        <li>Lembaga: Lemdiklat Satpam (1981)</li>
-                      </ul>
+                <div className="h-64 overflow-y-auto space-y-2 mb-3 text-sm">
+                  {aiMessages.map((m, i) => (
+                    <div key={i} className={`p-2 rounded-lg ${m.role === 'user' ? 'bg-gold/10 text-right' : 'bg-navy-700/50'}`}>
+                      <p className="text-white/80 text-xs whitespace-pre-wrap">{m.message}</p>
                     </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card variant="glass">
-              <CardHeader>
-                <CardTitle>
-                  <div className="flex items-center gap-2">
-                    <MessageCircle className="w-5 h-5 text-gold" />
-                    Diskusi Materi
-                  </div>
-                </CardTitle>
-              </CardHeader>
-              <CardContent>
-                <textarea
-                  className="w-full rounded-xl border border-white/10 bg-navy-900/50 px-4 py-3 text-sm text-white placeholder:text-white/30 outline-none focus:ring-2 focus:ring-gold/50"
-                  rows={3}
-                  placeholder="Tulis pertanyaan atau diskusi tentang materi ini..."
-                />
-                <div className="flex justify-end mt-3">
-                  <Button variant="gold" size="sm">Kirim</Button>
-                </div>
-              </CardContent>
-            </Card>
-          </div>
-
-          {/* Sidebar */}
-          <div className="space-y-6">
-            <Card variant="gradient">
-              <CardHeader>
-                <CardTitle>Progress</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="h-2 rounded-full bg-white/10 overflow-hidden mb-4">
-                  <div className="w-0 h-full rounded-full bg-gradient-to-r from-gold to-gold-dark" />
-                </div>
-                <p className="text-sm text-white/40">0% selesai</p>
-                <Button
-                  fullWidth
-                  variant={isCompleted ? 'secondary' : 'gold'}
-                  className="mt-4"
-                  onClick={() => setIsCompleted(!isCompleted)}
-                >
-                  <CheckCircle className="w-4 h-4 mr-2" />
-                  {isCompleted ? 'Selesai' : 'Tandai Selesai'}
-                </Button>
-              </CardContent>
-            </Card>
-
-            <Card variant="gradient">
-              <CardHeader>
-                <CardTitle>Materi Terkait</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <div className="space-y-2">
-                  {relatedMateri.map((m) => (
-                    <button
-                      key={m.judul}
-                      className="w-full flex items-center gap-3 p-3 rounded-xl hover:bg-white/5 transition-colors text-left"
-                    >
-                      <BookOpen className="w-4 h-4 text-gold flex-shrink-0" />
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm text-white truncate">{m.judul}</p>
-                        <p className="text-xs text-white/30">{m.durasi}</p>
-                      </div>
-                      {m.isCompleted && <CheckCircle className="w-4 h-4 text-green-400 flex-shrink-0" />}
-                    </button>
                   ))}
+                  {aiLoading && <p className="text-xs text-white/30 animate-pulse">Mengetik...</p>}
+                </div>
+                <div className="flex gap-2">
+                  <input
+                    value={aiInput} onChange={e => setAiInput(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAIAsk()}
+                    placeholder="Tanya tentang materi ini..."
+                    className="flex-1 bg-navy-800 border border-white/10 rounded-lg px-3 py-2 text-xs text-white placeholder:text-white/30 outline-none focus:border-gold/50"
+                  />
+                  <Button size="sm" onClick={handleAIAsk} disabled={!aiInput.trim() || aiLoading}>
+                    <Send className="w-3 h-3" />
+                  </Button>
                 </div>
               </CardContent>
             </Card>
           </div>
-        </div>
+        )}
       </div>
     </DashboardLayout>
   );
 }
-
-const relatedMateri = [
-  { judul: 'Tupoksi Satpam', durasi: '20 menit', isCompleted: false },
-  { judul: 'Turjawali', durasi: '25 menit', isCompleted: false },
-  { judul: 'Bela Diri Dasar', durasi: '30 menit', isCompleted: false },
-];
