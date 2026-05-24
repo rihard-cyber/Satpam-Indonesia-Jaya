@@ -1,44 +1,39 @@
 import { NextResponse } from 'next/server';
-import { createAdminClient } from '@/lib/supabase/admin';
-import { createServerSupabase } from '@/lib/supabase/server';
+import { sql } from '@/lib/neon/db';
+import bcrypt from 'bcryptjs';
+import crypto from 'crypto';
 
 export async function POST(request: Request) {
   try {
-    const body = await request.json();
-    const { email, password, nama_lengkap, nama_panggilan, phone, tingkatan_id } = body;
+    const { email, password, nama_lengkap, nama_panggilan, phone } = await request.json();
 
-    const supabase = createAdminClient();
-
-    const { data: authData, error: authError } = await supabase.auth.admin.createUser({
-      email,
-      password,
-      email_confirm: false,
-      user_metadata: { nama_lengkap, nama_panggilan },
-    });
-
-    if (authError) {
-      return NextResponse.json({ message: authError.message }, { status: 400 });
+    if (!email || !password || !nama_lengkap) {
+      return NextResponse.json({ message: 'Email, password, dan nama wajib diisi' }, { status: 400 });
     }
 
-    const { error: profileError } = await supabase
-      .from('profiles')
-      .update({
-        nama_lengkap,
-        nama_panggilan,
-        phone,
-        tingkatan_id,
-      })
-      .eq('user_id', authData.user.id);
-
-    if (profileError) {
-      return NextResponse.json({ message: profileError.message }, { status: 500 });
+    const [existing] = await sql`SELECT id FROM users WHERE email = ${email}`;
+    if (existing) {
+      return NextResponse.json({ message: 'Email sudah terdaftar' }, { status: 409 });
     }
+
+    const id = crypto.randomUUID();
+    const password_hash = await bcrypt.hash(password, 12);
+
+    await sql`
+      INSERT INTO users (id, email, nama_lengkap, nama_panggilan, phone, password_hash)
+      VALUES (${id}, ${email}, ${nama_lengkap}, ${nama_panggilan || null}, ${phone || null}, ${password_hash})
+    `;
+
+    await sql`
+      INSERT INTO profiles (user_id) VALUES (${id})
+    `;
 
     return NextResponse.json({
-      message: 'Registrasi berhasil. Silakan cek email untuk verifikasi.',
-      user_id: authData.user.id,
+      message: 'Registrasi berhasil. Silakan login.',
+      user: { id, email, nama_lengkap },
     }, { status: 201 });
   } catch (err) {
-    return NextResponse.json({ message: 'Internal server error' }, { status: 500 });
+    const message = err instanceof Error ? err.message : 'Internal server error';
+    return NextResponse.json({ message }, { status: 500 });
   }
 }

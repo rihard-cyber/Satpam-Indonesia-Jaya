@@ -1,12 +1,24 @@
-import { type NextRequest } from 'next/server';
-import { updateSession } from '@/lib/supabase/middleware';
+import { auth } from '@/lib/auth';
+import { NextResponse } from 'next/server';
 
-export async function middleware(request: NextRequest) {
-  return await updateSession(request);
-}
+export default auth((req) => {
+  const { pathname } = req.nextUrl;
+  const isLoggedIn = !!req.auth;
+
+  const publicPaths = ['/login', '/register', '/forgot-password', '/landing', '/'];
+  const isPublic = publicPaths.some((path) => pathname.startsWith(path));
+
+  if (!isLoggedIn && !isPublic) {
+    return NextResponse.redirect(new URL('/login', req.url));
+  }
+
+  if (isLoggedIn && pathname.startsWith('/login')) {
+    return NextResponse.redirect(new URL('/dashboard', req.url));
+  }
+
+  return NextResponse.next();
+});
 
 export const config = {
-  matcher: [
-    '/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)',
-  ],
+  matcher: ['/((?!api|_next/static|_next/image|favicon.ico).*)'],
 };

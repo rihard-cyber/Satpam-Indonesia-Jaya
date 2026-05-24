@@ -1,26 +1,21 @@
 import { NextResponse } from 'next/server';
-import { createServerSupabase } from '@/lib/supabase/server';
+import { auth } from '@/lib/auth';
+import { sql } from '@/lib/neon/db';
 
 export async function GET() {
-  const supabase = await createServerSupabase();
+  const session = await auth();
 
-  const { data: { user }, error } = await supabase.auth.getUser();
-
-  if (error || !user) {
+  if (!session?.user?.id) {
     return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
   }
 
-  const { data: profile } = await supabase
-    .from('profiles')
-    .select('*, tingkatan:tingkatan_id(*), badges:user_badges(badge:badge_type_id(*))')
-    .eq('user_id', user.id)
-    .single();
+  const [user] = await sql`
+    SELECT u.*, p.*, t.nama as tingkatan_nama
+    FROM users u
+    LEFT JOIN profiles p ON p.user_id = u.id
+    LEFT JOIN tingkatan t ON t.id = u.tingkatan_id
+    WHERE u.id = ${session.user.id}
+  `;
 
-  return NextResponse.json({
-    user: {
-      id: user.id,
-      email: user.email,
-      ...profile,
-    },
-  });
+  return NextResponse.json({ user });
 }
