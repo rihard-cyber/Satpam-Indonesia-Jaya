@@ -226,3 +226,208 @@ export interface AuthResponse {
   token: string;
   refresh_token: string;
 }
+
+// ==========================================
+// TIER 1: PAYMENT GATEWAY
+// ==========================================
+export interface PaymentPlan {
+  id: string;
+  code: string;
+  nama: string;
+  deskripsi?: string;
+  harga: number;
+  durasi_hari: number;
+  fitur: string[];
+  type: 'loker' | 'course' | 'sertifikat' | 'patrol';
+  is_active: boolean;
+}
+
+export interface Payment {
+  id: string;
+  user_id: string;
+  plan_id?: string;
+  plan?: PaymentPlan;
+  amount: number;
+  status: 'pending' | 'success' | 'failed' | 'expired';
+  payment_method?: string;
+  midtrans_order_id?: string;
+  midtrans_transaction_id?: string;
+  midtrans_redirect_url?: string;
+  paid_at?: string;
+  expires_at?: string;
+}
+
+export interface CoursePurchase {
+  id: string;
+  user_id: string;
+  payment_id: string;
+  course_code: string;
+  course_nama: string;
+  access_until: string;
+  is_active: boolean;
+}
+
+// ==========================================
+// TIER 2: PATROLI DIGITAL
+// ==========================================
+export interface PatrolShift {
+  id: string;
+  user_id: string;
+  user?: User;
+  shift_date: string;
+  shift_type: 'pagi' | 'siang' | 'malam';
+  patrol_route?: string;
+  status: 'scheduled' | 'in_progress' | 'completed' | 'missed';
+  start_time?: string;
+  end_time?: string;
+  total_checkpoints: number;
+  completed_checkpoints: number;
+  notes?: string;
+}
+
+export interface PatrolCheckpoint {
+  id: string;
+  nama: string;
+  lokasi_lat?: number;
+  lokasi_lng?: number;
+  radius_meters: number;
+  qr_code?: string;
+  is_active: boolean;
+}
+
+export interface PatrolLog {
+  id: string;
+  shift_id: string;
+  checkpoint_id?: string;
+  checkpoint?: PatrolCheckpoint;
+  user_id: string;
+  scan_method: 'gps' | 'qr' | 'manual';
+  status: 'ok' | 'skip' | 'missed' | 'issue';
+  timestamp: string;
+  foto_url?: string;
+  catatan?: string;
+  lokasi_lat?: number;
+  lokasi_lng?: number;
+}
+
+// ==========================================
+// TIER 2: ABSENSI
+// ==========================================
+export interface AttendanceLog {
+  id: string;
+  user_id: string;
+  user?: User;
+  shift_id?: string;
+  type: 'checkin' | 'checkout';
+  method: 'qr' | 'gps' | 'manual';
+  timestamp: string;
+  foto_url?: string;
+  lokasi_lat?: number;
+  lokasi_lng?: number;
+  lokasi_nama?: string;
+  device_info?: string;
+}
+
+// ==========================================
+// TIER 2: DASHBOARD KOMANDAN
+// ==========================================
+export interface GuardTeam {
+  id: string;
+  nama_team: string;
+  commander_id: string;
+  commander?: User;
+  perusahaan?: string;
+  lokasi?: string;
+  is_active: boolean;
+  members?: TeamMember[];
+}
+
+export interface TeamMember {
+  id: string;
+  team_id: string;
+  user_id: string;
+  user?: User;
+  role: 'komandan' | 'danru' | 'anggota';
+  joined_at: string;
+}
+
+// ==========================================
+// TIER 3: LAPORAN KEJADIAN
+// ==========================================
+export interface IncidentReport {
+  id: string;
+  user_id: string;
+  user?: User;
+  shift_id?: string;
+  nomor_laporan?: string;
+  jenis_kejadian: 'pencurian' | 'kebakaran' | 'kecelakaan' | 'perkelahian' | 'pengancaman' | 'penyusupan' | 'kerusakan_aset' | 'kehilangan_barang' | 'pelanggaran_sop' | 'kecurigaan' | 'darurat_medis' | 'bencana_alam' | 'pelanggaran_lalu_lintas' | 'lainnya';
+  tingkat_darurat: 'rendah' | 'sedang' | 'tinggi' | 'kritis';
+  judul: string;
+  deskripsi: string;
+  lokasi?: string;
+  lokasi_lat?: number;
+  lokasi_lng?: number;
+  foto_url: string[];
+  video_url: string[];
+  korban_jiwa: number;
+  korban_luka: number;
+  kerugian_perkiraan?: number;
+  tindakan_awal?: string;
+  status: 'dilaporkan' | 'diverifikasi' | 'ditangani' | 'selesai' | 'ditutup';
+  handled_by?: string;
+  handler?: User;
+  handled_at?: string;
+  resolved_at?: string;
+  resolved_notes?: string;
+  created_at: string;
+}
+
+// ==========================================
+// TIER 3: PANIC BUTTON
+// ==========================================
+export interface PanicAlert {
+  id: string;
+  user_id: string;
+  user?: User;
+  type: 'panic' | 'emergency' | 'backup';
+  lokasi_lat?: number;
+  lokasi_lng?: number;
+  lokasi_nama?: string;
+  message?: string;
+  status: 'active' | 'acknowledged' | 'resolved' | 'false_alarm';
+  acknowledged_by?: string;
+  acknowledged_at?: string;
+  resolved_at?: string;
+}
+
+// ==========================================
+// TIER 4: CHAT REAL-TIME
+// ==========================================
+export interface ChatRoom {
+  id: string;
+  nama?: string;
+  type: 'direct' | 'group' | 'team';
+  team_id?: string;
+  created_by?: string;
+  members?: ChatRoomMember[];
+  last_message?: ChatMessage;
+}
+
+export interface ChatRoomMember {
+  id: string;
+  room_id: string;
+  user_id: string;
+  user?: User;
+  last_read_at: string;
+}
+
+export interface ChatMessage {
+  id: string;
+  room_id: string;
+  user_id: string;
+  user?: User;
+  message: string;
+  attachment_url?: string;
+  type: 'text' | 'image' | 'file' | 'location' | 'system';
+  created_at: string;
+}

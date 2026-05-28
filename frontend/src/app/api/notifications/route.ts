@@ -45,3 +45,28 @@ export async function PATCH(request: Request) {
     return NextResponse.json({ message: 'Gagal update notifikasi' }, { status: 500 });
   }
 }
+
+export async function POST(request: Request) {
+  const session = await auth();
+  if (!session?.user?.id) {
+    return NextResponse.json({ message: 'Unauthorized' }, { status: 401 });
+  }
+
+  try {
+    const { user_id, type, title, body, data } = await request.json();
+
+    if (!user_id || !type || !title) {
+      return NextResponse.json({ message: 'user_id, type, dan title wajib diisi' }, { status: 400 });
+    }
+
+    const [notification] = await sql`
+      INSERT INTO notifications (user_id, type, title, body, data)
+      VALUES (${user_id}, ${type}, ${title}, ${body || null}, ${data ? JSON.stringify(data) : null})
+      RETURNING *
+    `;
+
+    return NextResponse.json({ data: notification }, { status: 201 });
+  } catch {
+    return NextResponse.json({ message: 'Gagal membuat notifikasi' }, { status: 500 });
+  }
+}

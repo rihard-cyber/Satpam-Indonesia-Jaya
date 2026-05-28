@@ -10,6 +10,8 @@ const suggestions = [
   { icon: BookOpen, text: 'Cara membuat incident report?', color: 'text-green-400' },
   { icon: Shield, text: 'Apa itu Turjawali?', color: 'text-gold' },
   { icon: AlertTriangle, text: 'SOP kehilangan barang?', color: 'text-red-400' },
+  { icon: AlertTriangle, text: 'Analisis Kejadian Terbaru', color: 'text-orange-400' },
+  { icon: Shield, text: 'Laporan Keamanan', color: 'text-purple-400' },
 ];
 
 type ChatMessage = { role: 'assistant' | 'user'; message: string };

@@ -6,6 +6,32 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 const hasGemini = process.env.GEMINI_API_KEY && process.env.GEMINI_API_KEY.length > 10;
 const genAI = hasGemini ? new GoogleGenerativeAI(process.env.GEMINI_API_KEY!) : null;
 
+let cachedIncidentStats: string | null = null;
+let cachedStatsTime = 0;
+
+async function getIncidentStats(): Promise<string> {
+  const now = Date.now();
+  if (cachedIncidentStats && now - cachedStatsTime < 60000) return cachedIncidentStats;
+  try {
+    const stats = await sql`
+      SELECT 
+        COUNT(*)::int as total,
+        COUNT(*) FILTER (WHERE status = 'dilaporkan')::int as reported,
+        COUNT(*) FILTER (WHERE status = 'ditangani')::int as handled,
+        COUNT(*) FILTER (WHERE status = 'selesai')::int as resolved,
+        COUNT(*) FILTER (WHERE tingkat_darurat = 'kritis' OR tingkat_darurat = 'tinggi')::int as high_priority
+      FROM incident_reports
+      WHERE created_at > NOW() - INTERVAL '30 days'
+    `;
+    const s = stats[0] as any;
+    cachedIncidentStats = `Statistik insiden 30 hari terakhir: Total ${s.total} laporan (${s.reported} baru, ${s.handled} ditangani, ${s.resolved} selesai, ${s.high_priority} prioritas tinggi).`;
+    cachedStatsTime = now;
+    return cachedIncidentStats;
+  } catch {
+    return '';
+  }
+}
+
 const systemPrompt = `Kamu adalah AI Assistant "Satpam Indonesia JAYA". Jawab pertanyaan tentang profesi Satpam di Indonesia.
 
 Gunakan bahasa Indonesia yang jelas dan profesional. Jelaskan dengan detail. Jika tidak tahu, akui saja.
@@ -35,22 +61,60 @@ export async function POST(request: Request) {
 
     let reply = '';
 
-    if (hasGemini && genAI) {
+    const isIncidentQuery = /analisis|analisa|kejadian|insiden|laporan.*keamanan/i.test(message);
+
+    if (isIncidentQuery) {
       try {
-        const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
-        const context = contextTitle
-          ? `Konteks: user sedang membaca materi "${contextTitle}". Jawab relevan dengan materi tersebut.\n\n`
-          : '';
-        const result = await Promise.race([
-          model.generateContent(systemPrompt + '\n\n' + context + 'Pertanyaan: ' + message),
-          new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
-        ]);
-        reply = result.response.text();
+        const incidents = await sql`
+          SELECT id, judul, jenis_kejadian, tingkat_darurat, deskripsi, status, created_at
+          FROM incident_reports
+          ORDER BY created_at DESC
+          LIMIT 3
+        `;
+        if (incidents.length > 0) {
+          const latest = incidents[0] as any;
+          const anaRes = await fetch(new URL('/api/ai/analyze-incident', request.url).toString(), {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ incident_id: latest.id }),
+          });
+          const anaData = await anaRes.json();
+          if (anaData.analysis) {
+            reply = '**Analisis Kejadian Terbaru**\n\n' + anaData.analysis;
+            if (incidents.length > 1) {
+              reply += '\n\n---\n*Kejadian lain yang perlu diperhatikan:*\n';
+              for (let i = 1; i < incidents.length; i++) {
+                const inc = incidents[i] as any;
+                reply += `- ${inc.judul} (${inc.jenis_kejadian}, ${inc.status})\n`;
+              }
+            }
+          }
+        } else {
+          reply = 'Belum ada laporan kejadian yang tersedia untuk dianalisis.';
+        }
       } catch {
         reply = await getFallbackResponse(message, contextTitle);
       }
-    } else {
-      reply = await getFallbackResponse(message, contextTitle);
+    }
+
+    if (!reply) {
+      const stats = await getIncidentStats();
+      const fullPrompt = systemPrompt + '\n\n' + stats + '\n\n' + (contextTitle ? `Konteks: user sedang membaca materi "${contextTitle}". Jawab relevan dengan materi tersebut.\n\n` : '');
+
+      if (hasGemini && genAI) {
+        try {
+          const model = genAI.getGenerativeModel({ model: 'gemini-2.0-flash' });
+          const result = await Promise.race([
+            model.generateContent(fullPrompt + 'Pertanyaan: ' + message),
+            new Promise<never>((_, reject) => setTimeout(() => reject(new Error('timeout')), 8000)),
+          ]);
+          reply = result.response.text();
+        } catch {
+          reply = await getFallbackResponse(message, contextTitle);
+        }
+      } else {
+        reply = await getFallbackResponse(message, contextTitle);
+      }
     }
 
     await sql`

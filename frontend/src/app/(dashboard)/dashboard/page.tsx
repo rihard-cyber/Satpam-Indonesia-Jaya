@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useSession } from 'next-auth/react';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { Card, CardContent, CardHeader, CardTitle, Button, Badge } from '@/components/ui';
-import { BookOpen, Briefcase, MessageCircle, Award, TrendingUp, Shield, ChevronRight, GraduationCap, Star } from 'lucide-react';
+import { BookOpen, Briefcase, MessageCircle, Award, TrendingUp, Shield, ChevronRight, GraduationCap, Star, MapPin, Camera, Bell, AlertTriangle, Users, Bot } from 'lucide-react';
 
 export default function DashboardPage() {
   const { data: session } = useSession();
@@ -125,13 +125,18 @@ export default function DashboardPage() {
             </CardTitle>
           </CardHeader>
           <CardContent>
-            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+            <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
               {[
                 { label: 'Belajar Materi', icon: BookOpen, path: '/materi' },
                 { label: 'Cari Loker', icon: Briefcase, path: '/loker' },
-                { label: 'Forum Diskusi', icon: MessageCircle, path: '/forum' },
-                { label: 'AI Assistant', icon: Shield, path: '/ai-assistant' },
-                { label: 'Profile', icon: Award, path: '/profile' },
+                { label: 'Patroli Digital', icon: MapPin, path: '/patroli' },
+                { label: 'Absensi', icon: Camera, path: '/absensi' },
+                { label: 'Laporan Kejadian', icon: AlertTriangle, path: '/laporan' },
+                { label: 'Panic Button', icon: Bell, path: '/panic' },
+                { label: 'Dashboard Komandan', icon: Users, path: '/komandan' },
+                { label: 'Chat Tim', icon: MessageCircle, path: '/chat' },
+                { label: 'AI Assistant', icon: Bot, path: '/ai-assistant' },
+                { label: 'Forum Diskusi', icon: Shield, path: '/forum' },
               ].map((action) => (
                 <button key={action.label} onClick={() => router.push(action.path)}
                   className="flex flex-col items-center gap-2 p-4 rounded-xl bg-white/5 border border-white/5 hover:border-gold/20 hover:bg-gold/5 transition-all group">

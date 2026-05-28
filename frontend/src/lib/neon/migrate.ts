@@ -277,7 +277,241 @@ CREATE TABLE IF NOT EXISTS ai_chat_messages (
     message TEXT NOT NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
-`;
+
+-- ============================================================
+-- NEW FEATURE TABLES - Super App Security
+-- ============================================================
+
+-- 1. PAYMENTS / PREMIUM LISTINGS (Tier 1 - Monetization)
+CREATE TABLE IF NOT EXISTS payment_plans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    code TEXT UNIQUE NOT NULL,
+    nama TEXT NOT NULL,
+    deskripsi TEXT,
+    harga NUMERIC(15,2) NOT NULL,
+    durasi_hari INT NOT NULL,
+    fitur TEXT[],
+    type TEXT NOT NULL DEFAULT 'loker' CHECK (type IN ('loker', 'course', 'sertifikat', 'patrol')),
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+INSERT INTO payment_plans (code, nama, deskripsi, harga, durasi_hari, fitur, type) VALUES
+    ('loker_premium_30', 'Premium Listing 30 Hari', 'Lowongan tampil di urutan atas dengan badge premium', 50000, 30, ARRAY['Badge Premium', 'Urutan Atas', 'Prioritas Verifikasi'], 'loker'),
+    ('loker_premium_60', 'Premium Listing 60 Hari', 'Lowongan tampil premium selama 60 hari', 80000, 60, ARRAY['Badge Premium', 'Urutan Atas', 'Prioritas Verifikasi', 'Highlight Warna'], 'loker'),
+    ('loker_premium_90', 'Premium Listing 90 Hari', 'Lowongan tampil premium selama 90 hari', 120000, 90, ARRAY['Badge Premium', 'Urutan Atas', 'Prioritas Verifikasi', 'Highlight Warna', 'Push Notification'], 'loker'),
+    ('course_pratama', 'Kursus Gada Pratama', 'Akses penuh semua materi Gada Pratama + sertifikat', 150000, 365, ARRAY['Semua Materi Pratama', 'Sertifikat Digital', 'Konsultasi'], 'course'),
+    ('course_madya', 'Kursus Gada Madya', 'Akses penuh semua materi Gada Madya + sertifikat', 200000, 365, ARRAY['Semua Materi Madya', 'Sertifikat Digital', 'Konsultasi Danru'], 'course'),
+    ('course_utama', 'Kursus Gada Utama', 'Akses penuh semua materi Gada Utama + sertifikat', 300000, 365, ARRAY['Semua Materi Utama', 'Sertifikat Digital', 'Konsultasi Ahli'], 'course'),
+    ('sertifikat_digital', 'Sertifikat Digital Tervalidasi', 'Terbitkan sertifikat digital dengan QR code verifikasi', 75000, 0, ARRAY['QR Code', 'Verifikasi Online', 'Tanda Tangan Digital'], 'sertifikat')
+ON CONFLICT (code) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    plan_id UUID REFERENCES payment_plans(id),
+    amount NUMERIC(15,2) NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'success', 'failed', 'expired')),
+    payment_method TEXT,
+    midtrans_order_id TEXT,
+    midtrans_transaction_id TEXT,
+    midtrans_redirect_url TEXT,
+    paid_at TIMESTAMPTZ,
+    expires_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Premium job listings
+ALTER TABLE job_vacancies ADD COLUMN IF NOT EXISTS is_premium BOOLEAN DEFAULT FALSE;
+ALTER TABLE job_vacancies ADD COLUMN IF NOT EXISTS premium_expires_at TIMESTAMPTZ;
+ALTER TABLE job_vacancies ADD COLUMN IF NOT EXISTS payment_id UUID REFERENCES payments(id);
+
+-- 2. COURSE PURCHASES (Paid training)
+CREATE TABLE IF NOT EXISTS course_purchases (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    payment_id UUID REFERENCES payments(id),
+    course_code TEXT NOT NULL,
+    course_nama TEXT NOT NULL,
+    access_until TIMESTAMPTZ NOT NULL,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. PATROLI DIGITAL (Tier 2)
+CREATE TABLE IF NOT EXISTS patrol_shifts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    shift_date DATE NOT NULL,
+    shift_type TEXT NOT NULL CHECK (shift_type IN ('pagi', 'siang', 'malam')),
+    patrol_route TEXT,
+    status TEXT NOT NULL DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'in_progress', 'completed', 'missed')),
+    start_time TIMESTAMPTZ,
+    end_time TIMESTAMPTZ,
+    total_checkpoints INT DEFAULT 0,
+    completed_checkpoints INT DEFAULT 0,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS patrol_checkpoints (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nama TEXT NOT NULL,
+    lokasi_lat NUMERIC(10,7),
+    lokasi_lng NUMERIC(10,7),
+    radius_meters INT DEFAULT 20,
+    qr_code TEXT UNIQUE,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS patrol_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    shift_id UUID NOT NULL REFERENCES patrol_shifts(id),
+    checkpoint_id UUID REFERENCES patrol_checkpoints(id),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    scan_method TEXT NOT NULL CHECK (scan_method IN ('gps', 'qr', 'manual')),
+    status TEXT NOT NULL DEFAULT 'ok' CHECK (status IN ('ok', 'skip', 'missed', 'issue')),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    foto_url TEXT,
+    catatan TEXT,
+    lokasi_lat NUMERIC(10,7),
+    lokasi_lng NUMERIC(10,7),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. ABSENSI QR (Tier 2)
+CREATE TABLE IF NOT EXISTS attendance_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    shift_id UUID REFERENCES patrol_shifts(id),
+    type TEXT NOT NULL CHECK (type IN ('checkin', 'checkout')),
+    method TEXT NOT NULL CHECK (method IN ('qr', 'gps', 'manual')),
+    timestamp TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+    foto_url TEXT,
+    lokasi_lat NUMERIC(10,7),
+    lokasi_lng NUMERIC(10,7),
+    lokasi_nama TEXT,
+    device_info TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 5. LAPORAN KEJADIAN (Tier 3)
+CREATE TABLE IF NOT EXISTS incident_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    shift_id UUID REFERENCES patrol_shifts(id),
+    nomor_laporan TEXT UNIQUE,
+    jenis_kejadian TEXT NOT NULL CHECK (jenis_kejadian IN (
+        'pencurian', 'kebakaran', 'kecelakaan', 'perkelahian',
+        'pengancaman', 'penyusupan', 'kerusakan_aset', 'kehilangan_barang',
+        'pelanggaran_sop', 'kecurigaan', 'darurat_medis', 'bencana_alam',
+        'pelanggaran_lalu_lintas', 'lainnya'
+    )),
+    tingkat_darurat TEXT NOT NULL DEFAULT 'rendah' CHECK (tingkat_darurat IN ('rendah', 'sedang', 'tinggi', 'kritis')),
+    judul TEXT NOT NULL,
+    deskripsi TEXT NOT NULL,
+    lokasi TEXT,
+    lokasi_lat NUMERIC(10,7),
+    lokasi_lng NUMERIC(10,7),
+    foto_url TEXT[],
+    video_url TEXT[],
+    korban_jiwa INT DEFAULT 0,
+    korban_luka INT DEFAULT 0,
+    kerugian_perkiraan NUMERIC(15,2),
+    tindakan_awal TEXT,
+    status TEXT NOT NULL DEFAULT 'dilaporkan' CHECK (status IN (
+        'dilaporkan', 'diverifikasi', 'ditangani', 'selesai', 'ditutup'
+    )),
+    handled_by TEXT REFERENCES users(id),
+    handled_at TIMESTAMPTZ,
+    resolved_at TIMESTAMPTZ,
+    resolved_notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 6. PANIC BUTTON (Tier 3)
+CREATE TABLE IF NOT EXISTS panic_alerts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id TEXT NOT NULL REFERENCES users(id),
+    type TEXT NOT NULL DEFAULT 'panic' CHECK (type IN ('panic', 'emergency', 'backup')),
+    lokasi_lat NUMERIC(10,7),
+    lokasi_lng NUMERIC(10,7),
+    lokasi_nama TEXT,
+    message TEXT,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'acknowledged', 'resolved', 'false_alarm')),
+    acknowledged_by TEXT REFERENCES users(id),
+    acknowledged_at TIMESTAMPTZ,
+    resolved_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 7. DASHBOARD KOMANDAN (Tier 2) - team/guard management
+CREATE TABLE IF NOT EXISTS guard_teams (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nama_team TEXT NOT NULL,
+    commander_id TEXT NOT NULL REFERENCES users(id),
+    perusahaan TEXT,
+    lokasi TEXT,
+    is_active BOOLEAN DEFAULT TRUE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS team_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    team_id UUID NOT NULL REFERENCES guard_teams(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    role TEXT NOT NULL DEFAULT 'anggota' CHECK (role IN ('komandan', 'danru', 'anggota')),
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(team_id, user_id)
+);
+
+-- 8. AI INCIDENT ANALYSIS (Tier 3 enhancement)
+ALTER TABLE ai_chat_messages ADD COLUMN IF NOT EXISTS metadata JSONB;
+
+-- 9. REAL-TIME CHAT (Tier 4)
+CREATE TABLE IF NOT EXISTS chat_rooms (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    nama TEXT,
+    type TEXT NOT NULL DEFAULT 'direct' CHECK (type IN ('direct', 'group', 'team')),
+    team_id UUID REFERENCES guard_teams(id),
+    created_by TEXT REFERENCES users(id),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS chat_room_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    room_id UUID NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    last_read_at TIMESTAMPTZ DEFAULT NOW(),
+    joined_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(room_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS chat_messages (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    room_id UUID NOT NULL REFERENCES chat_rooms(id) ON DELETE CASCADE,
+    user_id TEXT NOT NULL REFERENCES users(id),
+    message TEXT NOT NULL,
+    attachment_url TEXT,
+    type TEXT DEFAULT 'text' CHECK (type IN ('text', 'image', 'file', 'location', 'system')),
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Indexes for new tables
+CREATE INDEX IF NOT EXISTS idx_patrol_shifts_user ON patrol_shifts(user_id, shift_date);
+CREATE INDEX IF NOT EXISTS idx_patrol_logs_shift ON patrol_logs(shift_id);
+CREATE INDEX IF NOT EXISTS idx_patrol_logs_user ON patrol_logs(user_id);
+CREATE INDEX IF NOT EXISTS idx_patrol_logs_timestamp ON patrol_logs(timestamp);
+CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance_logs(user_id, timestamp);
+CREATE INDEX IF NOT EXISTS idx_incident_reports_user ON incident_reports(user_id);
+CREATE INDEX IF NOT EXISTS idx_incident_reports_status ON incident_reports(status);
+CREATE INDEX IF NOT EXISTS idx_panic_alerts_status ON panic_alerts(status);
+CREATE INDEX IF NOT EXISTS idx_payments_user ON payments(user_id);
+CREATE INDEX IF NOT EXISTS idx_payments_status ON payments(status);
+CREATE INDEX IF NOT EXISTS idx_chat_messages_room ON chat_messages(room_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_chat_room_members_user ON chat_room_members(user_id);`;
 
 export async function runMigration() {
   const statements = migration

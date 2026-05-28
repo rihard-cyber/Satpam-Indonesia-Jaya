@@ -25,6 +25,12 @@ const menuItems = [
   { href: '/forum', label: 'Forum', icon: MessageCircle },
   { href: '/ai-assistant', label: 'AI Assistant', icon: Bot },
   { href: '/sertifikat', label: 'Sertifikat', icon: Award },
+  { href: '/patroli', label: 'Patroli Digital', icon: Shield },
+  { href: '/absensi', label: 'Absensi', icon: User },
+  { href: '/laporan', label: 'Laporan Kejadian', icon: Bell },
+  { href: '/panic', label: 'Panic Button', icon: Shield },
+  { href: '/komandan', label: 'Dashboard Komandan', icon: Award },
+  { href: '/chat', label: 'Chat Tim', icon: MessageCircle },
   { href: '/profile', label: 'Profile', icon: User },
   { href: '/notifications', label: 'Notifikasi', icon: Bell },
 ];
